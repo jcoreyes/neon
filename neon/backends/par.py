@@ -25,6 +25,9 @@ class NoPar(object):
         self.backend = None
         self.device_id = None
 
+    def size(self):
+        return 1
+
     def init_model(self, model, backend):
         backend.actual_batch_size = model.batch_size
 
