@@ -32,13 +32,19 @@ logger = logging.getLogger(__name__)
 class GPU(Backend):
     """
     Sets up a NervanaGPU based backend for matrix operations.
-    Note that some functions defined in the generic Backend class such as are
-    cross-map pooling and normalization and adaDelta are not implemented for
+    Note that some functions defined in the generic Backend class such as
+    cross-map pooling and normalization and are not implemented for
     this backend.
     """
     default_dtype = np.float32
 
     def __init__(self, rng_seed, stochastic_round=False, device_id=0):
+        import pycuda.driver as drv
+        drv.init()
+        global ctx
+        ctx = drv.Device(device_id).make_context()
+        import atexit
+        atexit.register(ctx.pop)
         self.ng = NervanaGPU(stochastic_round=stochastic_round)
         logger.info("Initialized NervanaGPU with stochastic_round=%s",
                     stochastic_round)

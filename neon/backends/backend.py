@@ -1166,6 +1166,15 @@ class Backend(YAMLable):
     def reduce_tensor(self, tensor):
         return self.par.reduce_tensor(tensor)
 
+    def scatter(self, src, dest):
+        return self.par.scatter(src, dest)
+
+    def allocate_fragment(self, buf_shape, dtype=None):
+        return self.par.allocate_fragment(buf_shape, dtype)
+
+    def all_reduce(self, tensor):
+        return self.par.all_reduce(tensor)
+
 
 class Tensor(object):
     """

@@ -134,14 +134,7 @@ def gen_backend(model, gpu=None, nrv=False, datapar=False, modelpar=False,
             try:
                 import nervanagpu  # noqa
                 try:
-                    # import pycuda.autoinit
-                    import pycuda.driver as drv
-                    drv.init()
                     device_id = device_id if device_id is not None else 0
-                    global ctx
-                    ctx = drv.Device(device_id).make_context()
-                    import atexit
-                    atexit.register(ctx.pop)
                     from neon.backends.gpu import GPU
                     be_name = 'NervanaGPU'
                     be = GPU(rng_seed=rng_seed,
