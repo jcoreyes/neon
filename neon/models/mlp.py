@@ -149,7 +149,7 @@ class MLP(Model):
                 if self.step_print > 0 and mb_id % self.step_print == 0:
                     self.print_training_error(self.cost_layer.get_cost(),
                                               mb_id, partial=True)
-                print self.cost_layer.get_cost().asnumpyarray()
+                # print self.cost_layer.get_cost().asnumpyarray()
                 self.backend.add(error, self.cost_layer.get_cost(), error)
                 self.backend.end(Block.minibatch, mb_id)
                 mb_id += 1

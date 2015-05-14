@@ -72,23 +72,13 @@ class MacrobatchDecodeThread(Thread):
             self.ds.img_macro[b_idx][mac_sz:] = 0
         # Leave behind the partial minibatch
         self.ds.minis_per_macro[b_idx] = mac_sz / bsz
-
-        self.ds.lbl_one_hot[b_idx] = \
-            {lbl: [None for mini_idx in range(self.ds.minis_per_macro[b_idx])]
-                for lbl in self.ds.label_list}
-
-        self.ds.img_mini_T[b_idx] = \
-            [None for mini_idx in range(self.ds.minis_per_macro[b_idx])]
-
-        for mini_idx in range(self.ds.minis_per_macro[b_idx]):
-            s_idx = mini_idx * bsz
-            e_idx = (mini_idx + 1) * bsz
-            for lbl in self.ds.label_list:
-                hl = np.squeeze(lbl_macro[lbl][s_idx:e_idx])
-                self.ds.lbl_one_hot[b_idx][lbl][mini_idx] = \
-                    np.eye(self.ds.nclass[lbl], dtype=ibetype)[hl].astype(
-                            ibetype, order='C')
-
+        for lbl in self.ds.label_list:
+            hl = np.squeeze(lbl_macro[lbl])
+            self.ds.lbl_one_hot[b_idx][lbl][:mac_sz] = \
+                np.eye(self.ds.nclass[lbl], dtype=ibetype)[hl].astype(
+                        ibetype, order='C')
+            if mac_sz < self.ds.macro_size:
+                self.ds.lbl_one_hot[b_idx][lbl][mac_sz:] = 0
         return
 
 
@@ -208,6 +198,8 @@ class Imageset(Dataset):
         # local shortcuts
         sbe = self.backend.empty
         sbaf = self.backend.allocate_fragment
+        sbhe = self.backend.alloc_host_mem
+
         betype = self.backend_type
         ibetype = self.img_dtype
 
@@ -262,23 +254,25 @@ class Imageset(Dataset):
         self.mini_idx = -1
 
         # Allocate space for host side image, targets and labels
-        self.img_macro = [np.zeros((self.macro_size, self.npixels),
+        self.img_macro = [sbhe((self.macro_size, self.npixels),
                                    dtype=ibetype) for i in
                           range(self.macro_num_decode_buf)]
-        self.img_mini_T = [None for i in range(self.macro_num_decode_buf)]
         self.tgt_macro = [None for i in range(self.macro_num_decode_buf)]
-        self.lbl_one_hot = [None for i in range(self.macro_num_decode_buf)]
+        self.lbl_one_hot = [{lbl: sbhe((self.macro_size, self.nclass[lbl]),
+                                   dtype=ibetype) for lbl in self.label_list}
+                             for i in range(self.macro_num_decode_buf)]
+
 
         # Allocate space for device side buffers
         inp_shape = (self.npixels, self.batch_size)
-        self.inp_beT = sbaf(inp_shape[::-1], dtype=betype)
-        self.inp_be = sbe(inp_shape, dtype=betype)
+        self.inp_beT = sbaf(inp_shape[::-1], dtype=ibetype)
+        self.inp_be = sbe(inp_shape, dtype=ibetype)
 
         lbl_shape = {lbl: (self.nclass[lbl], self.batch_size)
                      for lbl in self.label_list}
-        self.lbl_beT = {lbl: sbaf(lbl_shape[lbl][::-1], dtype=betype)
+        self.lbl_beT = {lbl: sbaf(lbl_shape[lbl][::-1], dtype=ibetype)
                        for lbl in self.label_list}
-        self.lbl_be = {lbl: sbe(lbl_shape[lbl], dtype=betype)
+        self.lbl_be = {lbl: sbe(lbl_shape[lbl], dtype=ibetype)
                        for lbl in self.label_list}
 
         # Allocate space for device side targets if necessary
@@ -324,37 +318,17 @@ class Imageset(Dataset):
 
         for lbl in self.label_list:
             if self.backend.rank() == 0:
-                hlbl = self.lbl_one_hot[b_idx][lbl][self.mini_idx]
+                hlbl = self.lbl_one_hot[b_idx][lbl][s_idx:e_idx]
             self.backend.scatter(hlbl, self.lbl_beT[lbl])
 
         self.inp_be[:] = self.inp_beT.T
         for lbl in self.label_list:
             self.lbl_be[lbl][:] = self.lbl_beT[lbl].T
-            tmp = self.backend.empty((1, self.lbl_be[lbl].shape[1]), dtype=np.int8)
-            self.backend.sum(self.lbl_be[lbl], axes=0, out=tmp)
-            print self.backend.rank(), tmp.asnumpyarray()
+
         if self.unit_norm:
             self.backend.divide(self.inp_be, self.norm_factor, self.inp_be)
 
         return self.inp_be, self.tgt_be, self.lbl_be
-        # # See if we are a partial minibatch
-        # self.inp_beT.copy_from(self.img_macro[b_idx][s_idx:e_idx])
-        # self.inp_be[:] = self.inp_beT.T
-
-        # # if self.unit_norm:
-        # #     self.backend.divide(self.inp_be, self.norm_factor, self.inp_be)
-
-        # for lbl in self.label_list:
-        #     self.lbl_beT[lbl].copy_from(
-        #         self.lbl_one_hot[b_idx][lbl][self.mini_idx])
-        #     self.lbl_be[lbl][:] = self.lbl_beT[lbl].T
-
-        # if self.tgt_be is not None:
-        #     self.tgt_be.copy_from(
-        #         self.tgt_macro[b_idx][:, s_idx:e_idx]
-        #             .astype(self.backend_type))
-
-        # return self.inp_be, self.tgt_be, self.lbl_be
 
     def has_set(self, setname):
         return True if (setname in ['train', 'validation']) else False

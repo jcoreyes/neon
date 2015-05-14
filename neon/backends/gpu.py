@@ -87,7 +87,7 @@ class GPU(Backend):
         """
         self.mem_pool = self.ng.empty(shape, dtype=dtype)
 
-    def alloc_host_mem(self, shape, dtype):
+    def alloc_host_mem(self, shape, dtype=default_dtype):
         return drv.pagelocked_empty(shape, dtype, order="C", mem_flags=0)
 
     def create_stream(self):
