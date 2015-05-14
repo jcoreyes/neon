@@ -896,3 +896,13 @@ class GPU(Backend):
 
         # Final update to the params
         ps_item[:] = ps_item + ls_item
+
+    def scatter_host(self, mpicomm, src, dest):
+        self.ng.scatter_host(mpicomm, src, dest)
+
+    def all_reduce(self, mpicomm, ary, updatebuf):
+        self.ng.all_reduce(mpicomm, ary, updatebuf)
+
+    def setup_local_contexts(self, mpicomm):
+        global ctx
+        self.ng.setup_multi_device_contexts(mpicomm, ctx)

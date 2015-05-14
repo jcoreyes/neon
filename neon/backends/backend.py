@@ -1172,9 +1172,6 @@ class Backend(YAMLable):
     def allocate_fragment(self, buf_shape, dtype=None):
         return self.par.allocate_fragment(buf_shape, dtype)
 
-    def all_reduce(self, tensor):
-        return self.par.all_reduce(tensor)
-
 
 class Tensor(object):
     """

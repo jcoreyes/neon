@@ -258,11 +258,11 @@ class DataPar(BasePar):
             assert hasattr(layer, 'nin')
             assert not hasattr(layer, 'parconf')
             conf = DataPar.Config()
-            # conf.updatebuf = np.empty(layer.weight_shape, dtype=np.float32)
-            conf.updatesz = layer.weight_shape[0] * layer.weight_shape[1]
-            if self.mpi_rank == 0:
-                conf.updatebuf = backend.empty((self.mpi_size, conf.updatesz),
-                                               dtype=np.float32)
+            conf.updatebuf = backend.empty(layer.weight_shape, dtype=np.float32)
+            # conf.updatesz = layer.weight_shape[0] * layer.weight_shape[1]
+            # if self.mpi_rank == 0:
+            #     conf.updatebuf = backend.empty((self.mpi_size, conf.updatesz),
+            #                                    dtype=np.float32)
             layer.parconf = conf
 
     def associate(self, backend):
@@ -272,6 +272,8 @@ class DataPar(BasePar):
         backend.update_fc = self.update_fc
         backend.update_conv = self.update_conv
         self.npreducebuf = np.empty((self.mpi_size, 1), dtype=np.float32)
+        if self.backend.__class__.__name__ == 'GPU':
+            self.backend.setup_local_contexts(self.comm)
 
     def distribute(self, batchdata):
         return self.backend.array(batchdata[:, self.start:self.end])
@@ -295,7 +297,7 @@ class DataPar(BasePar):
         # NOTE: We should be able to shard the updates and do summation in
         # parts across the different devices, but it seems to block in MPI
 
-        self.all_reduce(out)
+        self.backend.all_reduce(self.comm, out, conf.updatebuf)
         # gbuf = conf.updatebuf.asbuffer() if self.mpi_rank == 0 else None
         # self.comm.Gather([out.asbuffer(), self.bdtype], [gbuf, self.bdtype])
         # if self.mpi_rank == 0:
@@ -318,6 +320,19 @@ class DataPar(BasePar):
         self.update(out, layer.parconf)
 
     def scatter(self, src, dest):
+        self.backend.scatter_host(self.comm, src, dest)
+
+        # if self.mpi_rank == 0:
+        #     sz = src.shape[0] / self.mpi_size
+        #     dest.copy_from(src[:sz])
+        #     for i in range(1, self.mpi_size):
+        #         self.comm.Send([src[sz*i:sz*(i+1)], mdtype], dest=i)
+        # else:
+        #     self.comm.Recv([dest.asbuffer(), mdtype], source=0)
+        # self.comm.Scatter([src, mdtype],
+        #                   [dest.asbuffer(), mdtype], root=0)
+
+    def scatter_old(self, src, dest):
         mdtype = self.dtype_to_mpi(dest.dtype)
         # print mdtype
         if self.mpi_rank == 0:
@@ -329,7 +344,7 @@ class DataPar(BasePar):
             self.comm.Recv([dest.asbuffer(), mdtype], source=0)
         # self.comm.Scatter([src, mdtype],
         #                   [dest.asbuffer(), mdtype], root=0)
-        
+
 
     def allocate_fragment(self, buf_shape, dtype=None):
         fragment_buf_shape = (self.batch_size, buf_shape[1])
