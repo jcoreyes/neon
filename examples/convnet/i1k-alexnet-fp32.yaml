@@ -56,6 +56,7 @@
     num_workers: 12,
     mean_norm: True, # This just subtracts the mean, but doesn't divide by 128
     unit_norm: False, # This norms magnitude to 1
+    macro_shuffle: True,
     #ntrain: 24,
     #nval: 1,
     backend_type: &bt np.float32,

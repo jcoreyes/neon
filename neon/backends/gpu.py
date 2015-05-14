@@ -897,6 +897,44 @@ class GPU(Backend):
         # Final update to the params
         ps_item[:] = ps_item + ls_item
 
+    def fprop_bn_compound(self, inputs, beta, gamma, eps, xvar, xhat, out):
+        """
+        Batch normalization forward pass, compounded to run in 3 kernel calls.
+
+        Arguments:
+            inputs: input data to be normalized
+            beta: location parameter
+            gamma: scale parameter
+            eps: small constant for numerical stability
+            xvar: variance (updated)
+            xhat: normalized input (updated)
+            out: normalized and rescaled input (updated)
+        """
+        xvar[:] = self.ng.reciprocal(self.ng.sqrt(self.ng.var(inputs, axis=1) +
+                                                  eps))
+        xhat[:] = xvar * (inputs - self.ng.mean(inputs, axis=1))
+        out[:] = xhat * gamma + beta
+        return out
+
+    def bprop_bn_compound(self, xhat, error, xvar, gamma,
+                          beta_updates, gamma_updates):
+        """
+        Batch normalization backward pass, compounded to run with 4 kernel
+        calls.
+
+        Arguments:
+            xhat: normalized input data (updated)
+            error: backpropagated deltas (updated)
+            xvar: precomputed variance
+            gamma: scale parameter
+            beta_updates: gradient update for beta (updated)
+            gamma_updates: gradient update for gamma (updated)
+        """
+        gamma_updates[:] = self.ng.sum(xhat * error, axis=1)
+        beta_updates[:] = self.ng.sum(error, axis=1)
+        xhat[:] = (xhat * gamma_updates + beta_updates) / float(xhat.shape[1])
+        error[:] = xvar * gamma * (error - xhat)
+
     def scatter_host(self, mpicomm, src, dest):
         self.ng.scatter_host(mpicomm, src, dest)
 

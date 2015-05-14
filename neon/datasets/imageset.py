@@ -25,6 +25,7 @@ from threading import Thread
 from neon.datasets.dataset import Dataset
 from neon.util.param import opt_param, req_param
 from neon.util.persist import deserialize
+from random import shuffle
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +51,14 @@ class MacrobatchDecodeThread(Thread):
         ibetype = self.ds.img_dtype
         # This macrobatch could be smaller than macro_size for last macrobatch
         mac_sz = len(jdict['data'])
+
+        if self.ds.shuffle_macro:
+            shuffidx = range(mac_sz)
+            shuffle(shuffidx)
+            jdict['data'] = [jdict['data'][i] for i in shuffidx]
+            for k in self.ds.label_list:
+                jdict['labels'][k] = [jdict['labels'][k][i] for i in shuffidx]
+
         self.ds.tgt_macro[b_idx] = \
             jdict['targets'] if 'targets' in jdict else None
         lbl_macro = {k: jdict['labels'][k] for k in self.ds.label_list}
@@ -104,7 +113,7 @@ class Imageset(Dataset):
         opt_param(self, ['preprocess_done'], False)
         opt_param(self, ['dotransforms', 'square_crop'], False)
         opt_param(self, ['mean_norm', 'unit_norm'], False)
-
+        opt_param(self, ['shuffle_macro'], False)
         opt_param(self, ['tdims'], 0)
         opt_param(self, ['label_list'], ['l_id'])
         opt_param(self, ['num_channels'], 3)
