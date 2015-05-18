@@ -78,3 +78,8 @@ class FCLayer(WeightLayer):
             if self.use_biases is True:
                 self.backend.add(upm[u_idx+1], self.updates[u_idx+1],
                                  out=self.updates[u_idx+1])
+
+        if self.mem_pool is not None:
+            for dbuf in self.updates:
+                ubuf = self.mem_pool[:dbuf.size]
+                self.backend.reduce(dbuf, ubuf)

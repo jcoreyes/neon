@@ -232,7 +232,7 @@ class Imageset(Dataset):
         else:
             nrecs = self.nmacros * self.macro_size
         num_batches = nrecs / batch_size
-        num_batches /= self.backend.par.size()
+        num_batches /= self.backend.num_dev()
 
         self.mean_img = getattr(self, sn + '_mean')
         self.mean_img.shape = (self.num_channels, osz, osz)
@@ -251,7 +251,7 @@ class Imageset(Dataset):
         self.macro_decode_thread = None
 
         self.batch_size = batch_size
-        self.actual_batch_size = self.batch_size * self.backend.par.size()
+        self.actual_batch_size = self.backend.actual_batch_size
         self.predict = predict
         self.minis_per_macro = [self.macro_size / self.actual_batch_size
                                 for i in range(self.macro_num_decode_buf)]
@@ -297,22 +297,21 @@ class Imageset(Dataset):
         # Decode macrobatches in a background thread,
         # except for the first one which blocks
         if self.mini_idx == 0:
-            if self.backend.rank() == 0:
-                if self.macro_decode_thread is not None:
-                    # No-op unless all mini finish faster than one macro
-                    self.macro_decode_thread.join()
-                else:
-                    # special case for first run through
-                    self.macro_decode_thread = MacrobatchDecodeThread(self)
-                    self.macro_decode_thread.start()
-                    self.macro_decode_thread.join()
-
-                # usual case for kicking off a background macrobatch thread
-                self.macro_active_buf_idx = self.macro_decode_buf_idx
-                self.macro_decode_buf_idx = \
-                    (self.macro_decode_buf_idx + 1) % self.macro_num_decode_buf
+            if self.macro_decode_thread is not None:
+                # No-op unless all mini finish faster than one macro
+                self.macro_decode_thread.join()
+            else:
+                # special case for first run through
                 self.macro_decode_thread = MacrobatchDecodeThread(self)
                 self.macro_decode_thread.start()
+                self.macro_decode_thread.join()
+
+            # usual case for kicking off a background macrobatch thread
+            self.macro_active_buf_idx = self.macro_decode_buf_idx
+            self.macro_decode_buf_idx = \
+                (self.macro_decode_buf_idx + 1) % self.macro_num_decode_buf
+            self.macro_decode_thread = MacrobatchDecodeThread(self)
+            self.macro_decode_thread.start()
 
         # All minibatches except for the 0th just copy pre-prepared data
         b_idx = self.macro_active_buf_idx
@@ -321,13 +320,11 @@ class Imageset(Dataset):
 
         himg, hlbl = None, None
         # Copy into device and then transpose on device
-        if self.backend.rank() == 0:
-            himg = self.img_macro[b_idx][s_idx:e_idx]
+        himg = self.img_macro[b_idx][s_idx:e_idx]
         self.backend.scatter(himg, self.inp_beT)
 
         for lbl in self.label_list:
-            if self.backend.rank() == 0:
-                hlbl = self.lbl_one_hot[b_idx][lbl][s_idx:e_idx]
+            hlbl = self.lbl_one_hot[b_idx][lbl][s_idx:e_idx]
             self.backend.scatter(hlbl, self.lbl_beT[lbl])
 
         self.inp_be[:] = self.inp_beT.T

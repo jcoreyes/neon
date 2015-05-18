@@ -64,8 +64,8 @@
   ],
   # simple MLP model specification
   model: !obj:models.MLP {
-    num_epochs: 60,
-    batch_size: &bs 100,
+    num_epochs: 5,
+    batch_size: &bs 128,
     layers: [
       &datalayer !obj:layers.DataLayer {
         name: d0,
@@ -73,7 +73,18 @@
       },
       !obj:layers.FCLayer {
         name: h0,
-        nout: 2000,
+        nout: 500,
+        lrule_init: *gdm,
+        weight_init: *wt_init,
+        activation: !obj:transforms.RectLin {},
+      },
+      !obj:layers.DropOutLayer {
+        name: dropout1,
+        keep: 0.5,
+      },
+      !obj:layers.FCLayer {
+        name: h1,
+        nout: 500,
         lrule_init: *gdm,
         weight_init: *wt_init,
         activation: !obj:transforms.RectLin {},

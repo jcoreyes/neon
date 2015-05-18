@@ -153,6 +153,11 @@ class ConvLayer(WeightLayer):
             if self.use_biases is True:
                 self.backend.add(upm[1], self.updates[1], out=self.updates[1])
 
+        if self.mem_pool is not None:
+            for dbuf in self.updates:
+                ubuf = self.mem_pool[:dbuf.size]
+                self.backend.reduce(dbuf, ubuf)
+
 
 class SubConvLayer(ConvLayer):
     """

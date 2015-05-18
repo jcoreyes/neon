@@ -508,6 +508,12 @@ class WeightLayer(Layer):
         self.weights.name = self.name  # naming weights for timing diagnostics
         self.weight_updates = make_ebuf(self.weight_shape, self.updates_dtype)
 
+        # Create a mem_pool used for the reduction in data parallel mode
+        if self.backend.num_dev > 1:
+            self.mem_pool = make_ebuf(self.weight_shape, self.updates_dtype)
+        else:
+            self.mem_pool = None
+
         self.use_biases = 'bias_init' in self.weight_init.__dict__
         opt_param(self, ['brule_init'], None)
         if self.use_biases is True:

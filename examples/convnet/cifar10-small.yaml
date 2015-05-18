@@ -19,7 +19,7 @@
 
   dataset: &ds !obj:datasets.CIFAR10 {
     repo_path: '~/data',
-    sample_pct: 10,
+    sample_pct: 100,
   },
 
   metrics: {

@@ -15,6 +15,7 @@
 import logging
 import os
 import numpy as np
+from neon.util.param import opt_param
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +34,9 @@ class NoPar(object):
 
     def associate(self, backend):
         backend.par = self
+        opt_param(self, ['par_mode'], None)
+        opt_param(self, ['num_dev'], 1)
+
         self.backend = backend
 
     def distribute(self, batchdata):
@@ -50,11 +54,33 @@ class NoPar(object):
     def allocate_fragment(self, buf_shape, dtype=None):
         return self.backend.empty(buf_shape, dtype=dtype)
 
+    def reduce(self, ary, ubuf):
+        pass
+
     def all_reduce(self, tensor):
         pass
 
     def is_distributed(self):
         return False
+
+
+class DPar(NoPar):
+
+    def init_model(self, model, backend):
+        backend.actual_batch_size = model.batch_size
+
+    def associate(self, backend):
+        backend.par = self
+        opt_param(self, ['par_mode'], None)
+        opt_param(self, ['num_dev'], 1)
+
+        self.backend = backend
+
+    def allocate_fragment(self, buf_shape, dtype=None):
+        return self.backend.empty(buf_shape, dtype=dtype)
+
+    def is_distributed(self):
+        return True
 
 
 class BasePar(object):
@@ -298,14 +324,16 @@ class DataPar(BasePar):
         # parts across the different devices, but it seems to block in MPI
 
         self.backend.all_reduce(self.comm, out, conf.updatebuf)
+        # mdtype = self.dtype_to_mpi(out.dtype)
+
         # gbuf = conf.updatebuf.asbuffer() if self.mpi_rank == 0 else None
-        # self.comm.Gather([out.asbuffer(), self.bdtype], [gbuf, self.bdtype])
+        # self.comm.Gather([out.asbuffer(), mdtype], [gbuf, mdtype])
         # if self.mpi_rank == 0:
         #     orig_shape = out.shape
         #     out = out.reshape((1, conf.updatebuf.shape[1]))
         #     self.backend.sum(conf.updatebuf, axes=0, out=out)
         #     out = out.reshape(orig_shape)
-        # self.comm.Bcast([out.asbuffer(), self.bdtype])
+        # self.comm.Bcast([out.asbuffer(), mdtype])
 
     def update_fc(self, out, inputs, deltas, layer):
         self.orig_update_fc(out, inputs, deltas)
