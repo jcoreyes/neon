@@ -35,9 +35,9 @@ def replicate(method):
             tsrlist = []
             for idx, ctx in enumerate(getattr(self, 'ctxs')):
                 ctx.push()
-                myargs = [a[idx] if isinstance(a, MGPUTensor) else a \
+                myargs = [a._tensorlist[idx] if isinstance(a, MGPUTensor) else a \
                           for a in args]
-                mykwargs = {k: v[idx] if isinstance(v, MGPUTensor) else v \
+                mykwargs = {k: v._tensorlist[idx] if isinstance(v, MGPUTensor) else v \
                             for k, v in kwargs.iteritems()}
                 tsrlist.append(
                     getattr(super(cls, self), method)(*myargs, **mykwargs))
@@ -54,9 +54,9 @@ def passthru(method):
             for idx, (tsr, ctx) in enumerate(zip(getattr(self, '_tensorlist'),
                                                  getattr(self, 'ctxs'))):
                 ctx.push()
-                myargs = [a[idx] if isinstance(a, MGPUTensor) else a \
+                myargs = [a._tensorlist[idx] if isinstance(a, MGPUTensor) else a \
                           for a in args]
-                mykwargs = {k: v[idx] if isinstance(v, MGPUTensor) else v \
+                mykwargs = {k: v._tensorlist[idx] if isinstance(v, MGPUTensor) else v \
                             for k, v in kwargs.iteritems()}
                 tsrlist.append(getattr(tsr, method)(*myargs, **mykwargs))
                 ctx.pop()
