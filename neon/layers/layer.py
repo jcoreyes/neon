@@ -150,7 +150,7 @@ class Layer(YAMLable):
         return result + ')'
 
     def allocate_output_bufs(self):
-        make_zbuf = self.backend.zeros
+        make_zbuf = self.backend.allocate_fragment
         opt_param(self, ['out_shape'], (self.nout, self.batch_size))
         opt_param(self, ['delta_shape'], (self.nin, self.batch_size))
 
@@ -168,8 +168,8 @@ class Layer(YAMLable):
             return
 
         if delta_pool is None:
-            self.deltas = self.backend.zeros(self.delta_shape,
-                                             self.deltas_dtype)
+            self.deltas = self.backend.allocate_fragment(self.delta_shape,
+                                                         self.deltas_dtype)
         else:
             self.deltas = delta_pool[offset:(offset + self.delta_shape[0])]
 

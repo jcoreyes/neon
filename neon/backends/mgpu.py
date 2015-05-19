@@ -242,6 +242,9 @@ class MGPU(GPU):
         for s in self.strms:
             s.synchronize()
 
+    def allocate_fragment(self, shape, dtype):
+        return self.empty((shape[0], shape[1]/self.num_dev), dtype)
+
     def scatter(self, hbuf, dbuf, async=False):
         '''
         scatters the array data in hbuf to the mgpu tensor

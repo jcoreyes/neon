@@ -35,8 +35,7 @@ class NoPar(object):
     def associate(self, backend):
         backend.par = self
         opt_param(self, ['par_mode'], None)
-        opt_param(self, ['num_dev'], 1)
-
+        opt_param(backend, ['num_dev'], 1)
         self.backend = backend
 
     def distribute(self, batchdata):

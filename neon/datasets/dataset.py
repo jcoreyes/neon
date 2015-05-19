@@ -209,26 +209,18 @@ class Dataset(object):
         batchwise = []
         if self.backend.num_dev == 1:
             batchwise = [self.backend.array(
-                            data[bidx * bs:(bidx + 1) * bs].transpose()) \
+                            data[bidx * bs:(bidx + 1) * bs].transpose().copy()) \
                          for bidx in range(nbatches)]
         else:
             batchwise = []
-            dev_batchdataT = self.backend.empty((self.batch_size,
-                                                data.shape[1]))
+            dev_batchdataT = self.backend.empty(
+                    (self.batch_size / self.backend.num_dev, data.shape[1]))
             for batch in range(nbatches):
                 self.backend.scatter(data[batch * bs:(batch + 1) * bs],
                                      dev_batchdataT)
                 dev_batchdata = self.backend.empty(dev_batchdataT.shape[::-1])
                 dev_batchdata[:] = dev_batchdataT.T
-
-        for batch in range(nbatches):
-            batchdata = np.empty((data.shape[1], bs))
-            if self.backend.num_dev == 1:
-                batchdata[...] = data[batch * bs:(batch + 1) * bs].transpose()
-                dev_batchdata = self.backend.distribute(batchdata)
                 batchwise.append(dev_batchdata)
-            else:
-                dev_batchdata = self.backend.empty()
         return batchwise
 
     def format(self):

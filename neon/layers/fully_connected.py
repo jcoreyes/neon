@@ -80,6 +80,7 @@ class FCLayer(WeightLayer):
                                  out=self.updates[u_idx+1])
 
         if self.mem_pool is not None:
+            print 'doing update reduction'
             for dbuf in self.updates:
                 ubuf = self.mem_pool[:dbuf.size]
                 self.backend.reduce(dbuf, ubuf)

@@ -60,7 +60,7 @@ class MLP(Model):
         self.nin_max = max(map(lambda x: x.nin, self.layers[1:-1]))
         self.global_deltas = None
         if self.reuse_deltas:
-            self.global_deltas = backend.zeros(
+            self.global_deltas = backend.allocate_fragment(
                 (2 * self.nin_max, self.batch_size),
                 dtype=self.layers[1].deltas_dtype)
 
