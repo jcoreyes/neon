@@ -66,10 +66,9 @@ def passthru(method):
     return decorate
 
 @passthru('_assign')
-@passthru('__setitem__')
 @passthru('fill')
 @passthru('reshape')
-@passthru('T')
+@passthru('__getitem__')
 class MGPUTensor(object):
     ctxs = None
     num_dev = 0
@@ -89,12 +88,24 @@ class MGPUTensor(object):
     def size(self):
         return self._tensorlist[0].size
 
-    def __getitem__(self, index):
+    # def __getitem__(self, index):
+    #     if self.ctxs == None:
+    #         raise ValueError("Contexts not defined")
+    #     if index >= len(self._tensorlist):
+    #         raise IndexError("Index out of bounds")
+    #     return self._tensorlist[index]
+
+    def __setitem__(self, index, value):
         if self.ctxs == None:
             raise ValueError("Contexts not defined")
-        if index >= len(self._tensorlist):
-            raise IndexError("Index out of bounds")
-        return self._tensorlist[index]
+        for idx, (tsr, ctx) in enumerate(zip(getattr(self, '_tensorlist'),
+                                             getattr(self, 'ctxs'))):
+            ctx.push()
+            if isinstance(value, MGPUTensor):
+                tsr.__setitem__(index, value._tensorlist[idx])
+            else:
+                tsr.__setitem__(index, value)
+            ctx.pop()
 
     def asnumpyarray(self):
         if self.ptype == 'replica':
@@ -107,6 +118,21 @@ class MGPUTensor(object):
             rval = np.empty(wholeshape, dtype=self.dtype)
             #TODO stack the shards into this space
             return rval
+
+    @property
+    def T(self):
+        """
+        return a transposed view
+        """
+        tsrlist = []
+        for tsr in self._tensorlist:
+            tsrlist.append(GPUTensor(shape=tsr.shape[::-1], dtype=tsr.dtype,
+                                     allocator=tsr.allocator, base=tsr,
+                                     gpudata=tsr.gpudata,
+                                     strides=tsr.strides[::-1],
+                                     is_trans=(not tsr.is_trans),
+                                     name=tsr.name, rounding=tsr.rounding))
+        return self.__class__(tsrlist)
 
 
 @replicate('uniform')
@@ -243,10 +269,10 @@ class MGPU(GPU):
         assert ary.size == 1
         nbytes = ary.dtype.itemsize
         result = np.zeros((self.num_dev, 1), ary.dtype)
-        for i in range(self.num_dev):
+        for i, src_buf in enumerate(ary._tensorlist):
             self.ctxs[i].push()
             strm = self.strms[i] if async else None
-            drv.memcpy_dtoh_async(result[i], ary[i].ptr, strm)
+            drv.memcpy_dtoh_async(result[i], src_buf.ptr, strm)
             self.ctxs[i].pop()
         if async:
             self.synchronize()
@@ -277,12 +303,13 @@ class MGPU(GPU):
         if async:
             self.synchronize()
 
-        for src_idx, src_buf in enumerate(ary._tensorlist):
+        for src_idx, (sbuf, dbuf) in enumerate(zip(ary._tensorlist,
+                                                      ubuf._tensorlist)):
             start = src_idx * subsz
             end = start + subsz
-            src_buf = src_buf.reshape((totsz, 1))
-            ubtmp = ubuf[src_idx].reshape((numrep, ubuf[src_idx].size/numrep))
-            self.ng.sum(ubtmp, axis=0, out=src_buf[start:end])
+            sbuf = sbuf.reshape((totsz, 1))
+            ubtmp = dbuf.reshape((numrep, dbuf.size/numrep))
+            self.ng.sum(ubtmp, axis=0, out=sbuf[start:end])
 
         for dest_idx, dest_buf in enumerate(ary._tensorlist):
             for src_idx, src_buf in enumerate(ary._tensorlist):
