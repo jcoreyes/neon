@@ -45,6 +45,7 @@ class GPU(Backend):
         self.rng_seed = rng_seed
         self.rng_init()
         self.device_id = device_id if device_id is not None else 0
+        self.streams = [self.create_stream(), self.create_stream()]
 
     def __getstate__(self):
         """
@@ -192,6 +193,7 @@ class GPU(Backend):
             deltas (GPUTensor): The error values for this layer
             layer (Layer): The layer object.
         """
+        self.ng.stream = self.streams[0]
         self.ng.dot(weights.T, deltas, out)
 
     def update_fc(self, out, inputs, deltas, layer=None):
@@ -205,6 +207,7 @@ class GPU(Backend):
             deltas (GPUTensor): The error values for this layer
             layer (Layer): The layer object.
         """
+        self.ng.stream = self.streams[1]
         self.ng.dot(deltas, inputs.T, out)
 
     def fprop_conv(self, out, inputs, weights, ofmshape, ofmsize, ofmlocs,
