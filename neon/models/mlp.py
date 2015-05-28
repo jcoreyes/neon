@@ -47,7 +47,7 @@ class MLP(Model):
         self.print_layers()
 
     def initialize(self, backend, initlayer=None):
-	self.async = True
+        self.async = True
         self.data_layer = self.layers[0]
         self.cost_layer = self.layers[-1]
         self.class_layer = self.layers[-2]
@@ -92,15 +92,32 @@ class MLP(Model):
             ll.bprop(error)
 
     def bprop_update_async(self, mb_id):
-        for ll, nl in zip(reversed(self.layers),
-                          reversed(self.layers[1:] + [None])):
-            bp_error = None if nl is None else nl.deltas
+        # Finish bprop for last layer
+        ll = self.layers[-1]
+        bp_error = None
+        self.backend.begin(Block.bprop, mb_id)
+        ll.bprop(bp_error)
+        self.backend.end(Block.bprop, mb_id)
+        # Then kickoff streams for update of last layer and bprop of next layer
+
+        for ll, nl in zip(reversed(self.layers[:-1]),
+                          reversed(self.layers[1:])):
+            # Update
+            self.backend.stream = self.backend.streams[0]
+            self.backend.begin(Block.update, mb_id)
+            nl.update(self.epochs_complete)
+            self.backend.end(Block.update, mb_id)
+
+            # Bprop
+            self.backend.stream = self.backend.streams[1]
+            bp_error = nl.deltas
             self.backend.begin(Block.bprop, mb_id)
             ll.bprop(bp_error)
             self.backend.end(Block.bprop, mb_id)
-            self.backend.begin(Block.update, mb_id)
-            ll.update(self.epochs_complete)
-            self.backend.end(Block.update, mb_id)
+
+            self.backend.streams[0].synchronize()
+            self.backend.streams[1].synchronize()
+
 
     def print_layers(self, debug=False):
         printfunc = logger.debug if debug else logger.info
@@ -142,9 +159,9 @@ class MLP(Model):
         """
         Learn model weights on the given datasets.
         """
-	if self.async == True:
-	    self.fit_async(dataset)
-	    return
+        if self.async == True:
+            self.fit_async(dataset)
+            return
 
         error = self.backend.zeros((1, 1), dtype=self.cost_layer.weight_dtype)
         self.data_layer.init_dataset(dataset)
@@ -197,7 +214,7 @@ class MLP(Model):
                 self.backend.begin(Block.fprop, mb_id)
                 self.fprop()
                 self.backend.end(Block.fprop, mb_id)
-		self.bprop_update_async(mb_id)
+                self.bprop_update_async(mb_id)
                 if self.step_print > 0 and mb_id % self.step_print == 0:
                     self.print_training_error(self.cost_layer.get_cost(),
                                               mb_id, partial=True)
