@@ -47,6 +47,7 @@ class MLP(Model):
         self.print_layers()
 
     def initialize(self, backend, initlayer=None):
+	self.async = True
         self.data_layer = self.layers[0]
         self.cost_layer = self.layers[-1]
         self.class_layer = self.layers[-2]
@@ -90,6 +91,17 @@ class MLP(Model):
             error = None if nl is None else nl.deltas
             ll.bprop(error)
 
+    def bprop_update_async(self, mb_id):
+        for ll, nl in zip(reversed(self.layers),
+                          reversed(self.layers[1:] + [None])):
+            bp_error = None if nl is None else nl.deltas
+            self.backend.begin(Block.bprop, mb_id)
+            ll.bprop(bp_error)
+            self.backend.end(Block.bprop, mb_id)
+            self.backend.begin(Block.update, mb_id)
+            ll.update(self.epochs_complete)
+            self.backend.end(Block.update, mb_id)
+
     def print_layers(self, debug=False):
         printfunc = logger.debug if debug else logger.info
         netdesc = 'Layers:\n'
@@ -130,6 +142,10 @@ class MLP(Model):
         """
         Learn model weights on the given datasets.
         """
+	if self.async == True:
+	    self.fit_async(dataset)
+	    return
+
         error = self.backend.zeros((1, 1), dtype=self.cost_layer.weight_dtype)
         self.data_layer.init_dataset(dataset)
         self.data_layer.use_set('train')
@@ -181,19 +197,7 @@ class MLP(Model):
                 self.backend.begin(Block.fprop, mb_id)
                 self.fprop()
                 self.backend.end(Block.fprop, mb_id)
-
-                # Bprop and update in 1oop
-                for ll, nl in zip(reversed(self.layers),
-                                  reversed(self.layers[1:] + [None])):
-                    error = None if nl is None else nl.deltas
-                    self.backend.begin(Block.bprop, mb_id)
-                    ll.bprop(error)
-                    self.backend.end(Block.bprop, mb_id)
-                    self.backend.begin(Block.update, mb_id)
-                    ll.update(self.epochs_complete)
-                    self.backend.end(Block.update, mb_id)
-
-
+		self.bprop_update_async(mb_id)
                 if self.step_print > 0 and mb_id % self.step_print == 0:
                     self.print_training_error(self.cost_layer.get_cost(),
                                               mb_id, partial=True)
