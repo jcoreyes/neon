@@ -163,6 +163,51 @@ class MLP(Model):
             self.save_snapshot()
         self.data_layer.cleanup()
 
+    def fit_async(self, dataset):
+        """
+        Asynchronous version of fit which uses gpu streams for lazy updates
+        """
+        error = self.backend.zeros((1, 1), dtype=self.cost_layer.weight_dtype)
+        self.data_layer.init_dataset(dataset)
+        self.data_layer.use_set('train')
+        logger.info('commencing model fitting')
+        while self.epochs_complete < self.num_epochs:
+            self.backend.begin(Block.epoch, self.epochs_complete)
+            error.fill(0.0)
+            mb_id = 1
+            self.data_layer.reset_counter()
+            while self.data_layer.has_more_data():
+                self.backend.begin(Block.minibatch, mb_id)
+                self.backend.begin(Block.fprop, mb_id)
+                self.fprop()
+                self.backend.end(Block.fprop, mb_id)
+
+                # Bprop and update in 1oop
+                for ll, nl in zip(reversed(self.layers),
+                                  reversed(self.layers[1:] + [None])):
+                    error = None if nl is None else nl.deltas
+                    self.backend.begin(Block.bprop, mb_id)
+                    ll.bprop(error)
+                    self.backend.end(Block.bprop, mb_id)
+                    self.backend.begin(Block.update, mb_id)
+                    ll.update(self.epochs_complete)
+                    self.backend.end(Block.update, mb_id)
+
+
+                if self.step_print > 0 and mb_id % self.step_print == 0:
+                    self.print_training_error(self.cost_layer.get_cost(),
+                                              mb_id, partial=True)
+                self.backend.add(error, self.cost_layer.get_cost(), error)
+                self.backend.end(Block.minibatch, mb_id)
+                mb_id += 1
+            self.print_training_error(error, self.data_layer.num_batches)
+            self.print_layers(debug=True)
+            self.backend.end(Block.epoch, self.epochs_complete)
+            self.epochs_complete += 1
+            self.save_snapshot()
+        self.data_layer.cleanup()
+
+
     def set_train_mode(self, mode):
         for ll in self.layers:
             ll.set_train_mode(mode)

@@ -191,7 +191,6 @@ class GPU(Backend):
             deltas (GPUTensor): The error values for this layer
             layer (Layer): The layer object.
         """
-        self.ng.stream = self.streams[0]
         self.ng.dot(weights.T, deltas, out)
 
     def update_fc(self, out, inputs, deltas, layer=None):
@@ -205,7 +204,6 @@ class GPU(Backend):
             deltas (GPUTensor): The error values for this layer
             layer (Layer): The layer object.
         """
-        self.ng.stream = self.streams[1]
         self.ng.dot(deltas, inputs.T, out)
 
     def fprop_conv(self, out, inputs, weights, ofmshape, ofmsize, ofmlocs,

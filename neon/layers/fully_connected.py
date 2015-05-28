@@ -78,6 +78,3 @@ class FCLayer(WeightLayer):
             if self.use_biases is True:
                 self.backend.add(upm[u_idx+1], self.updates[u_idx+1],
                                  out=self.updates[u_idx+1])
-
-        self.backend.streams[0].synchronize()
-        self.backend.streams[1].synchronize()
