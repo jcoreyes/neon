@@ -200,6 +200,7 @@ class MLP(Model):
         """
         Asynchronous version of fit which uses gpu streams for lazy updates
         """
+        import pycuda.driver as drv
         error = self.backend.zeros((1, 1), dtype=self.cost_layer.weight_dtype)
         self.data_layer.init_dataset(dataset)
         self.data_layer.use_set('train')
@@ -209,18 +210,26 @@ class MLP(Model):
             error.fill(0.0)
             mb_id = 1
             self.data_layer.reset_counter()
+            total_msecs = 0
             while self.data_layer.has_more_data():
                 self.backend.begin(Block.minibatch, mb_id)
                 self.backend.begin(Block.fprop, mb_id)
                 self.fprop()
                 self.backend.end(Block.fprop, mb_id)
+                start = drv.Event()
+                end = drv.Event()
+                start.record()
                 self.bprop_update_async(mb_id)
+                end.record()
+                end.synchronize()
+                total_msecs += end.time_since(start)
                 if self.step_print > 0 and mb_id % self.step_print == 0:
                     self.print_training_error(self.cost_layer.get_cost(),
                                               mb_id, partial=True)
                 self.backend.add(error, self.cost_layer.get_cost(), error)
                 self.backend.end(Block.minibatch, mb_id)
                 mb_id += 1
+            print ("Total time %f Average Time %f" %(total_msecs, total_msecs/mb_id))
             self.print_training_error(error, self.data_layer.num_batches)
             self.print_layers(debug=True)
             self.backend.end(Block.epoch, self.epochs_complete)
