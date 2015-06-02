@@ -102,6 +102,7 @@ class MLP(Model):
 
     def print_training_error(self, error, num_batches, partial=False):
         rederr = self.backend.reduce_tensor(error)
+        print error, rederr, num_batches
         if self.backend.rank() != 0:
             return
         if partial is True:
@@ -151,6 +152,7 @@ class MLP(Model):
                                               mb_id, partial=True)
                 # print self.cost_layer.get_cost().asnumpyarray()
                 self.backend.add(error, self.cost_layer.get_cost(), error)
+                print error.asnumpyarray()
                 self.backend.end(Block.minibatch, mb_id)
                 mb_id += 1
             self.print_training_error(error, self.data_layer.num_batches)

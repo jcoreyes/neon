@@ -76,9 +76,9 @@ class MGPUTensor(object):
     ctxs = None
     num_dev = 0
 
-    def __init__(self, tensorlist):
+    def __init__(self, tensorlist, ptype='fragment'):
         self._tensorlist = tensorlist
-        self.ptype = 'replica'
+        self.ptype = ptype
 
     @property
     def shape(self):
@@ -111,10 +111,13 @@ class MGPUTensor(object):
             self.ctxs[0].pop()
             return rval
         else:
-            wholeshape = (self.shape[0], self.shape[1] * self.num_dev)
-            rval = np.empty(wholeshape, dtype=self.dtype)
-            # TODO stack the shards into this space
-            return rval
+            rval = []
+            for i, subtensor in enumerate(self._tensorlist):
+                self.ctxs[i].push()
+                npv = subtensor.get()
+                rval.append(npv)
+                self.ctxs[i].pop()
+            return np.hstack(rval)
 
     @property
     def T(self):
@@ -274,6 +277,7 @@ class MGPU(GPU):
             self.ctxs[i].pop()
         if async:
             self.synchronize()
+        print result
         return result.sum()
 
     def reduce(self, ary, ubuf, async=False):

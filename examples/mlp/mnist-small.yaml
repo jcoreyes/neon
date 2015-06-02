@@ -19,7 +19,7 @@
 
   dataset: &ds !obj:datasets.MNIST {
     repo_path: '~/data',
-    sample_pct: 100,
+    sample_pct: 10,
   },
 
   metrics: {
@@ -64,7 +64,7 @@
   ],
   # simple MLP model specification
   model: !obj:models.MLP {
-    num_epochs: 10,
+    num_epochs: 1,
     batch_size: &bs 128,
     layers: [
       &datalayer !obj:layers.DataLayer {
