@@ -454,6 +454,19 @@ class GPU(Backend):
             self.ng.sum(tsr, axis=axes, out=out)
         return out
 
+    def norm(self, tsr, order, axis, out):
+        """
+        Sum
+
+        Arguments:
+            tsr  (GPUTensor): Input tensor
+            order (int): Axis along which the reduction is performed.\
+            axis (int): Axis along which the reduction is performed.\
+            out (GPUTensor): Output tensor
+        """
+        out[:] = self.ng.sum(tsr, axis=axis)
+        return out
+
     def mean(self, tsr, axes, out):
         """
         Calculates the arithmetic mean of the elements along the specified
