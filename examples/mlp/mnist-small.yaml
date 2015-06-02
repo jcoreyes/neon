@@ -64,7 +64,7 @@
   ],
   # simple MLP model specification
   model: !obj:models.MLP {
-    num_epochs: 1,
+    num_epochs: 5,
     batch_size: &bs 128,
     layers: [
       &datalayer !obj:layers.DataLayer {

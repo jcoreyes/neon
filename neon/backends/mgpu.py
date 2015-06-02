@@ -92,6 +92,10 @@ class MGPUTensor(object):
     def size(self):
         return self._tensorlist[0].size
 
+    @property
+    def ptr(self):
+        return self._tensorlist[0].gpudata.__int__()
+
     def __setitem__(self, index, value):
         if self.ctxs is None:
             raise ValueError("Contexts not defined")
@@ -240,7 +244,7 @@ class MGPU(GPU):
         for s in self.strms:
             s.synchronize()
 
-    def allocate_fragment(self, shape, dtype):
+    def allocate_fragment(self, shape, dtype=default_dtype):
         return self.empty((shape[0], shape[1]/self.num_dev), dtype)
 
     def scatter(self, hbuf, dbuf, async=False):
@@ -277,7 +281,6 @@ class MGPU(GPU):
             self.ctxs[i].pop()
         if async:
             self.synchronize()
-        print result
         return result.sum()
 
     def reduce(self, ary, ubuf, async=False):
@@ -292,14 +295,17 @@ class MGPU(GPU):
                 dest = dest_buf.ptr + src_idx * subsz * dsz
                 src = src_buf.ptr + dest_idx * subsz * dsz
                 nbytes = dsz * subsz
-                self.ctxs[src_idx].push()
                 strm = self.strms[src_idx] if async else None
+                myargs = [dest, src, nbytes]
                 if src_idx == dest_idx:
-                    drv.memcpy_dtod_async(dest, src, nbytes, strm)
+                    cpfunc = drv.memcpy_dtod_async
                 else:
-                    drv.memcpy_peer_async(dest, src, nbytes,
-                                          self.ctxs[dest_idx],
-                                          self.ctxs[src_idx], strm)
+                    cpfunc = drv.memcpy_peer_async
+                    myargs.extend([self.ctxs[dest_idx], self.ctxs[src_idx]])
+                if async:
+                    myargs.append(self.strms[src_idx])
+                self.ctxs[src_idx].push()
+                cpfunc(*myargs)
                 self.ctxs[src_idx].pop()
 
         if async:
@@ -307,11 +313,17 @@ class MGPU(GPU):
 
         for src_idx, (sbuf, dbuf) in enumerate(zip(ary._tensorlist,
                                                    ubuf._tensorlist)):
+            if async:
+                self.ng.stream = self.strms[src_idx]
             start = src_idx * subsz
             end = start + subsz
             sbuf = sbuf.reshape((totsz, 1))
             ubtmp = dbuf.reshape((numrep, dbuf.size/numrep))
             self.ng.sum(ubtmp, axis=0, out=sbuf[start:end])
+
+        if async:
+            self.ng.stream = None
+            self.synchronize()
 
         for dest_idx, dest_buf in enumerate(ary._tensorlist):
             for src_idx, src_buf in enumerate(ary._tensorlist):
@@ -320,12 +332,10 @@ class MGPU(GPU):
                 dest = dest_buf.ptr + src_idx * subsz * dsz
                 src = src_buf.ptr + src_idx * subsz * dsz
                 nbytes = dsz * subsz
-                self.ctxs[src_idx].push()
                 strm = self.strms[src_idx] if async else None
                 drv.memcpy_peer_async(dest, src, nbytes,
                                       self.ctxs[dest_idx],
                                       self.ctxs[src_idx], strm)
-                self.ctxs[src_idx].pop()
 
         if async:
             self.synchronize()

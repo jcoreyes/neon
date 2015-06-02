@@ -102,7 +102,6 @@ class MLP(Model):
 
     def print_training_error(self, error, num_batches, partial=False):
         rederr = self.backend.reduce_tensor(error)
-        print error, rederr, num_batches
         if self.backend.rank() != 0:
             return
         if partial is True:
@@ -150,9 +149,7 @@ class MLP(Model):
                 if self.step_print > 0 and mb_id % self.step_print == 0:
                     self.print_training_error(self.cost_layer.get_cost(),
                                               mb_id, partial=True)
-                # print self.cost_layer.get_cost().asnumpyarray()
                 self.backend.add(error, self.cost_layer.get_cost(), error)
-                print error.asnumpyarray()
                 self.backend.end(Block.minibatch, mb_id)
                 mb_id += 1
             self.print_training_error(error, self.data_layer.num_batches)
@@ -188,11 +185,11 @@ class MLP(Model):
         self.data_layer.use_set(setname, predict=True)
         self.data_layer.reset_counter()
         nrecs = self.batch_size * 1
-        outputs = self.backend.empty((self.class_layer.nout, nrecs))
+        outputs = self.backend.allocate_fragment((self.class_layer.nout, nrecs))
         if self.data_layer.has_labels:
-            reference = self.backend.empty((1, nrecs))
+            reference = self.backend.allocate_fragment((1, nrecs))
         else:
-            reference = self.backend.empty(outputs.shape)
+            reference = self.backend.allocate_fragment(outputs.shape)
 
         self.set_train_mode(False)
 
@@ -228,18 +225,19 @@ class MLP(Model):
         assert self.data_layer.has_set(setname)
         self.data_layer.use_set(setname, predict=True)
         nrecs = self.batch_size * self.data_layer.num_batches
-        outputs = self.backend.empty((self.class_layer.nout, nrecs))
+        outputs = self.backend.allocate_fragment((self.class_layer.nout, nrecs))
         if self.data_layer.has_labels:
-            reference = self.backend.empty((1, nrecs))
+            reference = self.backend.allocate_fragment((1, nrecs))
         else:
-            reference = self.backend.empty(outputs.shape)
+            reference = self.backend.allocate_fragment(outputs.shape)
 
         batch = 0
         for batch_preds, batch_refs in self.predict_generator(dataset,
                                                               setname):
-            start = batch * self.batch_size
-            end = start + self.batch_size
-            outputs[:, start:end] = self.get_classifier_output()
+            output_set = self.get_classifier_output()
+            start = batch * output_set.shape[1]
+            end = start + output_set.shape[1]
+            outputs[:, start:end] = output_set
             reference[:, start:end] = self.cost_layer.get_reference()
             batch += 1
 

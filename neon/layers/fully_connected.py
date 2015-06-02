@@ -80,6 +80,7 @@ class FCLayer(WeightLayer):
                                  out=self.updates[u_idx+1])
 
         if self.mem_pool is not None:
-            for dbuf in self.updates:
-                ubuf = self.mem_pool[:dbuf.size]
+            for ii, dbuf in enumerate(self.updates):
+                ubuf = self.mem_pool[:dbuf.size].reshape(dbuf.shape)
+                ubuf.fill(0.0)
                 self.backend.reduce(dbuf, ubuf)

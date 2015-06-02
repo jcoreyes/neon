@@ -510,7 +510,8 @@ class WeightLayer(Layer):
 
         # Create a mem_pool used for the reduction in data parallel mode
         if self.backend.num_dev > 1:
-            self.mem_pool = make_ebuf(self.weight_shape, self.updates_dtype)
+            self.mem_pool = make_ebuf((self.weights.size, 1),
+                                      self.updates_dtype)
         else:
             self.mem_pool = None
 

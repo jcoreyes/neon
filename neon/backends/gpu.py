@@ -587,6 +587,9 @@ class GPU(Backend):
         """
         return self.ng.ones(shape, dtype=dtype)
 
+    def allocate_fragment(self, shape, dtype=default_dtype):
+        return self.empty(shape, dtype=dtype)
+
     def empty(self, shape, dtype=default_dtype):
         """
         Allocate a new GPUTensor.
