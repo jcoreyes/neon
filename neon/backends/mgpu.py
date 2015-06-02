@@ -29,16 +29,17 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 
+
 def replicate(method):
     def decorate(cls):
         def func(self, *args, **kwargs):
             tsrlist = []
             for idx, ctx in enumerate(getattr(self, 'ctxs')):
                 ctx.push()
-                myargs = [a._tensorlist[idx] if isinstance(a, MGPUTensor) else a \
-                          for a in args]
-                mykwargs = {k: v._tensorlist[idx] if isinstance(v, MGPUTensor) else v \
-                            for k, v in kwargs.iteritems()}
+                myargs = [a._tensorlist[idx] if isinstance(
+                    a, MGPUTensor) else a for a in args]
+                mykwargs = {k: v._tensorlist[idx] if isinstance(
+                    v, MGPUTensor) else v for k, v in kwargs.iteritems()}
                 tsrlist.append(
                     getattr(super(cls, self), method)(*myargs, **mykwargs))
                 ctx.pop()
@@ -47,6 +48,7 @@ def replicate(method):
         return cls
     return decorate
 
+
 def passthru(method):
     def decorate(cls):
         def func(self, *args, **kwargs):
@@ -54,16 +56,17 @@ def passthru(method):
             for idx, (tsr, ctx) in enumerate(zip(getattr(self, '_tensorlist'),
                                                  getattr(self, 'ctxs'))):
                 ctx.push()
-                myargs = [a._tensorlist[idx] if isinstance(a, MGPUTensor) else a \
-                          for a in args]
-                mykwargs = {k: v._tensorlist[idx] if isinstance(v, MGPUTensor) else v \
-                            for k, v in kwargs.iteritems()}
+                myargs = [a._tensorlist[idx] if isinstance(
+                    a, MGPUTensor) else a for a in args]
+                mykwargs = {k: v._tensorlist[idx] if isinstance(
+                    v, MGPUTensor) else v for k, v in kwargs.iteritems()}
                 tsrlist.append(getattr(tsr, method)(*myargs, **mykwargs))
                 ctx.pop()
             return MGPUTensor(tsrlist) if tsrlist[0] is not None else None
         setattr(cls, method, func)
         return cls
     return decorate
+
 
 @passthru('_assign')
 @passthru('fill')
@@ -72,6 +75,7 @@ def passthru(method):
 class MGPUTensor(object):
     ctxs = None
     num_dev = 0
+
     def __init__(self, tensorlist):
         self._tensorlist = tensorlist
         self.ptype = 'replica'
@@ -88,15 +92,8 @@ class MGPUTensor(object):
     def size(self):
         return self._tensorlist[0].size
 
-    # def __getitem__(self, index):
-    #     if self.ctxs == None:
-    #         raise ValueError("Contexts not defined")
-    #     if index >= len(self._tensorlist):
-    #         raise IndexError("Index out of bounds")
-    #     return self._tensorlist[index]
-
     def __setitem__(self, index, value):
-        if self.ctxs == None:
+        if self.ctxs is None:
             raise ValueError("Contexts not defined")
         for idx, (tsr, ctx) in enumerate(zip(getattr(self, '_tensorlist'),
                                              getattr(self, 'ctxs'))):
@@ -116,7 +113,7 @@ class MGPUTensor(object):
         else:
             wholeshape = (self.shape[0], self.shape[1] * self.num_dev)
             rval = np.empty(wholeshape, dtype=self.dtype)
-            #TODO stack the shards into this space
+            # TODO stack the shards into this space
             return rval
 
     @property
@@ -126,7 +123,8 @@ class MGPUTensor(object):
         """
         tsrlist = []
         for tsr in self._tensorlist:
-            tsrlist.append(GPUTensor(shape=tsr.shape[::-1], dtype=tsr.dtype,
+            tsrlist.append(GPUTensor(backend=tsr.backend,
+                                     shape=tsr.shape[::-1], dtype=tsr.dtype,
                                      allocator=tsr.allocator, base=tsr,
                                      gpudata=tsr.gpudata,
                                      strides=tsr.strides[::-1],
@@ -135,8 +133,6 @@ class MGPUTensor(object):
         return self.__class__(tsrlist)
 
 
-@replicate('uniform')
-@replicate('normal')
 @replicate('fprop_fc')
 @replicate('bprop_fc')
 @replicate('update_fc')
@@ -180,7 +176,6 @@ class MGPUTensor(object):
 @replicate('ada_update')
 @replicate('fprop_bn_compound')
 @replicate('bprop_bn_compound')
-
 class MGPU(GPU):
     default_dtype = np.float32
 
@@ -307,7 +302,7 @@ class MGPU(GPU):
             self.synchronize()
 
         for src_idx, (sbuf, dbuf) in enumerate(zip(ary._tensorlist,
-                                                      ubuf._tensorlist)):
+                                                   ubuf._tensorlist)):
             start = src_idx * subsz
             end = start + subsz
             sbuf = sbuf.reshape((totsz, 1))
@@ -332,4 +327,3 @@ class MGPU(GPU):
             self.synchronize()
 
         return ary
-
