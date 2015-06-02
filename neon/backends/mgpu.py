@@ -286,13 +286,13 @@ class MGPU(GPU):
         totsz = ary.size
         subsz = (totsz + numrep - 1) / numrep
         dsz = ary.dtype.itemsize
-        assert ubuf.size >= totsz
+        assert ubuf.size == subsz * numrep
 
         for dest_idx, dest_buf in enumerate(ubuf._tensorlist):
             for src_idx, src_buf in enumerate(ary._tensorlist):
                 dest = dest_buf.ptr + src_idx * subsz * dsz
                 src = src_buf.ptr + dest_idx * subsz * dsz
-                nbytes = dsz * subsz
+                nbytes = dsz * min(subsz, totsz - dest_idx * subsz)
                 strm = self.strms[src_idx] if async else None
                 myargs = [dest, src, nbytes]
                 if src_idx == dest_idx:
@@ -300,8 +300,7 @@ class MGPU(GPU):
                 else:
                     cpfunc = drv.memcpy_peer_async
                     myargs.extend([self.ctxs[dest_idx], self.ctxs[src_idx]])
-                if async:
-                    myargs.append(self.strms[src_idx])
+                myargs.append(strm)
                 self.ctxs[src_idx].push()
                 cpfunc(*myargs)
                 self.ctxs[src_idx].pop()
@@ -314,7 +313,7 @@ class MGPU(GPU):
             if async:
                 self.ng.stream = self.strms[src_idx]
             start = src_idx * subsz
-            end = start + subsz
+            end = start + min(subsz, totsz - start)
             sbuf = sbuf.reshape((totsz, 1))
             ubtmp = dbuf.reshape((numrep, dbuf.size/numrep))
             self.ng.sum(ubtmp, axis=0, out=sbuf[start:end])
@@ -329,7 +328,7 @@ class MGPU(GPU):
                     continue
                 dest = dest_buf.ptr + src_idx * subsz * dsz
                 src = src_buf.ptr + src_idx * subsz * dsz
-                nbytes = dsz * subsz
+                nbytes = dsz * min(subsz, totsz - src_idx * subsz)
                 strm = self.strms[src_idx] if async else None
                 drv.memcpy_peer_async(dest, src, nbytes,
                                       self.ctxs[dest_idx],

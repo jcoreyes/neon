@@ -37,16 +37,22 @@ class TestGPU(object):
 
     @attr('bbx')
     def reduction_test(self):
+        nr = self.be.num_dev
         # create a numpy array as the test-bed
-        ASIZE = 10
-        h_a = np.random.randn(ASIZE * self.be.num_dev).reshape(
-                (self.be.num_dev, ASIZE)).astype(self.be.default_dtype)
-        h_result = np.sum(h_a, axis=0)
+        ASIZE = 9
+        # round up to the nearest multiple of num_dev
+        BSIZE = -(-ASIZE // nr) * nr
+        h_a = np.random.randn(ASIZE * nr).reshape(
+                (nr, ASIZE)).astype(self.be.default_dtype)
+        h_result = np.sum(h_a, axis=0, keepdims=True)
 
         d_a = self.be.empty((1, ASIZE))
-        u_a = self.be.empty((1, ASIZE))
+        u_a = self.be.empty((1, BSIZE))
         self.be.scatter(h_a, d_a)
-        self.be.reduce(d_a, u_a)
+        self.be.reduce(d_a, u_a, async=True)
         print h_result
         print d_a._tensorlist[0].asnumpyarray()
-        # np.testing.assert_allclose(actual, h_result, atol=1e-6, rtol=0)
+
+        for i in range(nr):
+            np.testing.assert_allclose(d_a._tensorlist[i].asnumpyarray(),
+                                       h_result, atol=1e-6, rtol=0)
