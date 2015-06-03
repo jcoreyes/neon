@@ -287,20 +287,20 @@ class MGPU(GPU):
         subsz = (totsz + numrep - 1) / numrep
         dsz = ary.dtype.itemsize
         assert ubuf.size == subsz * numrep
+        strms = self.strms if async else [None for i in range(numrep)]
 
         for dest_idx, dest_buf in enumerate(ubuf._tensorlist):
             for src_idx, src_buf in enumerate(ary._tensorlist):
                 dest = dest_buf.ptr + src_idx * subsz * dsz
                 src = src_buf.ptr + dest_idx * subsz * dsz
                 nbytes = dsz * min(subsz, totsz - dest_idx * subsz)
-                strm = self.strms[src_idx] if async else None
                 myargs = [dest, src, nbytes]
                 if src_idx == dest_idx:
                     cpfunc = drv.memcpy_dtod_async
                 else:
                     cpfunc = drv.memcpy_peer_async
                     myargs.extend([self.ctxs[dest_idx], self.ctxs[src_idx]])
-                myargs.append(strm)
+                myargs.append(strms[src_idx])
                 self.ctxs[src_idx].push()
                 cpfunc(*myargs)
                 self.ctxs[src_idx].pop()
@@ -310,17 +310,15 @@ class MGPU(GPU):
 
         for src_idx, (sbuf, dbuf) in enumerate(zip(ary._tensorlist,
                                                    ubuf._tensorlist)):
-            if async:
-                self.ng.stream = self.strms[src_idx]
+            self.ng.stream = strms[src_idx]
             start = src_idx * subsz
             end = start + min(subsz, totsz - start)
             sbuf = sbuf.reshape((totsz, 1))
             ubtmp = dbuf.reshape((numrep, dbuf.size/numrep))
             self.ng.sum(ubtmp, axis=0, out=sbuf[start:end])
 
-        if async:
-            self.ng.stream = None
-            self.synchronize()
+        # if async:
+        #     self.synchronize()
 
         for dest_idx, dest_buf in enumerate(ary._tensorlist):
             for src_idx, src_buf in enumerate(ary._tensorlist):
@@ -329,12 +327,13 @@ class MGPU(GPU):
                 dest = dest_buf.ptr + src_idx * subsz * dsz
                 src = src_buf.ptr + src_idx * subsz * dsz
                 nbytes = dsz * min(subsz, totsz - src_idx * subsz)
-                strm = self.strms[src_idx] if async else None
                 drv.memcpy_peer_async(dest, src, nbytes,
                                       self.ctxs[dest_idx],
-                                      self.ctxs[src_idx], strm)
+                                      self.ctxs[src_idx],
+                                      strms[src_idx])
 
         if async:
             self.synchronize()
 
+        self.ng.stream = None
         return ary
